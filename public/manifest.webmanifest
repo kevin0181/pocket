@@ -1,0 +1,16 @@
+{
+  "name": "TCG Lens KR",
+  "short_name": "TCG Lens",
+  "description": "한글판 포켓몬 카드 OCR 기반 KREAM 참고 시세 스캐너",
+  "start_url": "/scan",
+  "display": "standalone",
+  "background_color": "#090d14",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
