@@ -297,6 +297,12 @@ input {
   gap: 8px;
 }
 
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .search-form input {
   width: 100%;
   min-height: 46px;
@@ -305,6 +311,18 @@ input {
   padding: 0 14px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.07);
+}
+
+.bookmarklet-box {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .ocr-box {

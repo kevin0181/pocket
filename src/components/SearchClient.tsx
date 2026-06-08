@@ -1,13 +1,65 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PricePanel } from "@/components/PricePanel";
+import { makeBookmarklet } from "@/lib/bookmarklet";
+import { parseManualQuery } from "@/lib/cardParsing";
+import { calculateStats } from "@/lib/priceStats";
+import type { KreamListing, PriceResult } from "@/lib/types";
+
+type SearchResponse = {
+  cardInfo: ReturnType<typeof parseManualQuery>;
+  queries: string[];
+  result: PriceResult;
+};
+
+type KreamImportPayload = {
+  query?: string;
+  listings?: KreamListing[];
+  collectedAt?: string;
+  searchUrl?: string;
+};
 
 export function SearchClient() {
   const [query, setQuery] = useState("리자몽 ex 134/108 SAR 한글판");
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+  const bookmarkletHref = useMemo(() => makeBookmarklet(origin || "https://poket-mu.vercel.app"), [origin]);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    const imported = new URLSearchParams(window.location.search).get("import");
+    if (!imported) return;
+
+    try {
+      const payload = decodeImportPayload(imported);
+      const importedQuery = payload.query?.trim() || "KREAM 가져오기";
+      const listings = Array.isArray(payload.listings) ? payload.listings : [];
+      const collectedAt = payload.collectedAt || new Date().toISOString();
+      setQuery(importedQuery);
+      setData({
+        cardInfo: parseManualQuery(importedQuery),
+        queries: [importedQuery],
+        result: {
+          query: importedQuery,
+          source: "KREAM",
+          stats: calculateStats(listings),
+          listings,
+          collectedAt,
+          cached: false,
+          searchUrl: payload.searchUrl || makeKreamSearchUrl(importedQuery),
+          warnings: listings.some((listing) => listing.price)
+            ? []
+            : ["KREAM 화면에서 상품은 읽었지만 가격은 표시되지 않았습니다."],
+        },
+      });
+    } catch {
+      setError("KREAM 가져오기 데이터를 읽지 못했습니다.");
+    }
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -41,9 +93,33 @@ export function SearchClient() {
             검색
           </button>
         </form>
+        <div className="action-row">
+          <a className="button" href={makeKreamSearchUrl(query)} target="_blank" rel="noreferrer">
+            KREAM 열기
+          </a>
+          <button className="button" type="button" onClick={() => copyBookmarklet(bookmarkletHref, setCopied)}>
+            {copied ? "복사됨" : "북마클릿 복사"}
+          </button>
+        </div>
+        <textarea className="bookmarklet-box" readOnly value={bookmarkletHref} aria-label="북마클릿 코드" />
         {error ? <p className="subtle">{error}</p> : null}
       </section>
       <PricePanel data={data} loading={loading} />
     </div>
   );
+}
+
+function makeKreamSearchUrl(query: string) {
+  const params = new URLSearchParams({ keyword: query, tab: "products" });
+  return `https://www.kream.co.kr/search?${params.toString()}`;
+}
+
+function decodeImportPayload(value: string): KreamImportPayload {
+  return JSON.parse(decodeURIComponent(escape(atob(value)))) as KreamImportPayload;
+}
+
+async function copyBookmarklet(value: string, setCopied: (copied: boolean) => void) {
+  await navigator.clipboard.writeText(value);
+  setCopied(true);
+  window.setTimeout(() => setCopied(false), 1600);
 }
