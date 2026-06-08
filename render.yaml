@@ -5,4 +5,4 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm run render:kream-test
-    autoDeploy: false
+    autoDeploy: true

@@ -7,7 +7,12 @@ const USER_AGENT =
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/health") {
-      return sendJson(res, 200, { ok: true, now: new Date().toISOString() });
+      return sendJson(res, 200, {
+        ok: true,
+        now: new Date().toISOString(),
+        commit: process.env.RENDER_GIT_COMMIT || "local",
+        service: process.env.RENDER_SERVICE_NAME || "local",
+      });
     }
 
     if (req.method === "GET" && req.url?.startsWith("/api/detail")) {
