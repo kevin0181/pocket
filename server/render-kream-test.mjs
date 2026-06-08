@@ -10,6 +10,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, now: new Date().toISOString() });
     }
 
+    if (req.method === "GET" && req.url?.startsWith("/api/detail")) {
+      const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+      const productId = url.searchParams.get("id");
+      if (!productId) return sendJson(res, 400, { error: "id가 필요합니다." });
+      return sendJson(res, 200, await fetchProductDetail(productId));
+    }
+
     if (req.method !== "POST" || !req.url?.startsWith("/api/search")) {
       return sendJson(res, 404, { error: "POST /api/search 또는 GET /health만 지원합니다." });
     }
@@ -60,7 +67,7 @@ async function searchKream(query) {
 
   const data = JSON.parse(text);
   const products = extractProducts(data).slice(0, 8);
-  const listings = await Promise.all(products.map((product) => enrichProduct(product)));
+  const listings = await enrichProducts(products);
 
   return {
     ok: true,
@@ -69,6 +76,7 @@ async function searchKream(query) {
     byteLength: text.length,
     productCount: products.length,
     listings,
+    stats: calculateStats(listings),
   };
 }
 
@@ -141,17 +149,22 @@ function extractProducts(data) {
   });
 }
 
+async function enrichProducts(products) {
+  const enriched = [];
+  for (const product of products) {
+    enriched.push(await enrichProduct(product));
+  }
+  return enriched;
+}
+
 async function enrichProduct(product) {
-  if (product.price) return product;
+  if (product.price) return { ...product, detail: { skipped: "price_from_search" } };
 
   try {
-    const response = await fetch(makeKreamProductApiUrl(product.productId), {
-      headers: makeKreamApiHeaders(product.url),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) return product;
+    const detailResult = await fetchProductDetail(product.productId, product.url);
+    if (!detailResult.ok) return { ...product, detail: detailResult };
 
-    const detail = await response.json();
+    const detail = detailResult.body;
     const release = detail?.release || {};
     const market = detail?.market || {};
     return {
@@ -159,9 +172,47 @@ async function enrichProduct(product) {
       title: release.translated_name || release.name || product.title,
       price: parsePrice(market.last_sale_price) || parsePrice(market.last_price_normal) || product.price,
       imageUrl: Array.isArray(release.image_urls) ? release.image_urls[0] : undefined,
+      detail: {
+        ok: true,
+        status: detailResult.status,
+        marketKeys: Object.keys(market).slice(0, 20),
+      },
     };
-  } catch {
-    return product;
+  } catch (error) {
+    return {
+      ...product,
+      detail: {
+        ok: false,
+        error: error instanceof Error ? error.message : "알 수 없는 오류",
+      },
+    };
+  }
+}
+
+async function fetchProductDetail(productId, referer = `https://www.kream.co.kr/products/${productId}`) {
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(makeKreamProductApiUrl(productId), {
+      headers: makeKreamApiHeaders(referer),
+      signal: AbortSignal.timeout(12000),
+    });
+    const text = await response.text();
+    const contentType = response.headers.get("content-type") || "";
+    return {
+      ok: response.ok,
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      contentType,
+      byteLength: text.length,
+      body: response.ok && contentType.includes("json") ? JSON.parse(text) : undefined,
+      sample: response.ok ? undefined : text.slice(0, 300),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      elapsedMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : "알 수 없는 오류",
+    };
   }
 }
 
@@ -181,6 +232,27 @@ function parsePrice(value) {
   if (typeof value !== "string") return null;
   const parsed = Number(value.replace(/[^\d]/g, ""));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function calculateStats(listings) {
+  const prices = listings
+    .map((listing) => listing.price)
+    .filter((price) => typeof price === "number" && Number.isFinite(price) && price > 0)
+    .sort((a, b) => a - b);
+
+  if (prices.length === 0) return null;
+
+  const middle = Math.floor(prices.length / 2);
+  const median = prices.length % 2 === 0 ? Math.round((prices[middle - 1] + prices[middle]) / 2) : prices[middle];
+  const average = Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length);
+
+  return {
+    lowest: prices[0],
+    median,
+    average,
+    highest: prices[prices.length - 1],
+    count: prices.length,
+  };
 }
 
 function cleanupText(value) {
