@@ -25,7 +25,7 @@ export type PriceStats = {
 
 export type PriceResult = {
   query: string;
-  source: "KREAM";
+  source: "KREAM" | "Collectory";
   stats: PriceStats | null;
   listings: KreamListing[];
   collectedAt: string;

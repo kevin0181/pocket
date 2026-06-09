@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildKreamQueries, hasSearchableCardSignal, parseManualQuery, parseOcrText } from "@/lib/cardParsing";
+import { searchCollectory } from "@/lib/collectoryProvider";
 import { getCachedResult, setCachedResult } from "@/lib/searchCache";
 import { searchKream } from "@/lib/kreamProvider";
 
@@ -27,8 +28,9 @@ export async function POST(request: Request) {
 
   const queries = body.query ? [body.query.trim(), ...buildKreamQueries(cardInfo)] : buildKreamQueries(cardInfo);
   const uniqueQueries = Array.from(new Set(queries.filter(Boolean)));
+  const collectoryQueries = Array.from(new Set([cardInfo.cardName, ...uniqueQueries].filter((query) => query.trim().length >= 2)));
 
-  for (const query of uniqueQueries) {
+  for (const query of [...collectoryQueries, ...uniqueQueries]) {
     const cached = getCachedResult(query);
     if (cached && cached.listings.length > 0) {
       return NextResponse.json({ cardInfo, queries: uniqueQueries, result: cached });
@@ -36,6 +38,15 @@ export async function POST(request: Request) {
   }
 
   const tried = [];
+  for (const query of collectoryQueries) {
+    const collectoryResult = await searchCollectory(query, cardInfo);
+    setCachedResult(query, collectoryResult);
+    tried.push(collectoryResult);
+    if (collectoryResult.listings.length > 0) {
+      return NextResponse.json({ cardInfo, queries: uniqueQueries, result: collectoryResult });
+    }
+  }
+
   for (const query of uniqueQueries) {
     const result = await searchKream(query, cardInfo);
     setCachedResult(query, result);

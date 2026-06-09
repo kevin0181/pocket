@@ -12,6 +12,8 @@ type SearchResponse = {
 export function PricePanel({ data, loading }: { data?: SearchResponse | null; loading?: boolean }) {
   const cardInfo = data?.cardInfo;
   const result = data?.result;
+  const sourceLabel = result?.source === "Collectory" ? "Collectory 참고 시세" : "KREAM 참고 시세";
+  const sourceActionLabel = result?.source === "Collectory" ? "Collectory 검색 열기" : "KREAM 검색 열기";
 
   return (
     <div className="stack">
@@ -31,8 +33,8 @@ export function PricePanel({ data, loading }: { data?: SearchResponse | null; lo
       </section>
 
       <section className="panel stack">
-        <h2>KREAM 참고 시세</h2>
-        {loading ? <p className="subtle">KREAM 데이터를 가져오는 중...</p> : null}
+        <h2>{sourceLabel}</h2>
+        {loading ? <p className="subtle">시세 데이터를 가져오는 중...</p> : null}
         {result?.stats ? (
           <div className="metric-grid">
             <Metric label="중앙값" value={formatWon(result.stats.median)} />
@@ -47,7 +49,7 @@ export function PricePanel({ data, loading }: { data?: SearchResponse | null; lo
         )}
         {result ? (
           <a className="button" href={result.searchUrl} target="_blank" rel="noreferrer">
-            KREAM 검색 열기
+            {sourceActionLabel}
           </a>
         ) : null}
         {result?.warnings.length ? (
@@ -68,7 +70,7 @@ export function PricePanel({ data, loading }: { data?: SearchResponse | null; lo
 
       {result?.listings.length ? (
         <section className="panel stack">
-          <h3>검색된 매물</h3>
+          <h3>검색된 참고 데이터</h3>
           {result.listings.map((listing) => (
             <a className="listing" href={listing.url || result.searchUrl} target="_blank" rel="noreferrer" key={`${listing.title}-${listing.price}`}>
               {listing.imageUrl ? <img src={listing.imageUrl} alt="" /> : <span className="image-fallback" />}
