@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildKreamQueries, hasSearchableCardSignal, parseManualQuery, parseOcrText } from "@/lib/cardParsing";
 import { searchCollectory } from "@/lib/collectoryProvider";
+import { searchCollectoryDatabase } from "@/lib/databaseProvider";
 import { getCachedResult, setCachedResult } from "@/lib/searchCache";
 import { searchKream } from "@/lib/kreamProvider";
 
@@ -38,6 +39,16 @@ export async function POST(request: Request) {
   }
 
   const tried = [];
+  for (const query of collectoryQueries) {
+    const dbResult = await searchCollectoryDatabase(query, cardInfo);
+    if (dbResult) {
+      tried.push(dbResult);
+      if (dbResult.listings.length > 0) {
+        return NextResponse.json({ cardInfo, queries: uniqueQueries, result: dbResult });
+      }
+    }
+  }
+
   for (const query of collectoryQueries) {
     const collectoryResult = await searchCollectory(query, cardInfo);
     setCachedResult(query, collectoryResult);

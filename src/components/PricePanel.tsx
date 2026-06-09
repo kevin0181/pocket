@@ -12,8 +12,9 @@ type SearchResponse = {
 export function PricePanel({ data, loading }: { data?: SearchResponse | null; loading?: boolean }) {
   const cardInfo = data?.cardInfo;
   const result = data?.result;
-  const sourceLabel = result?.source === "Collectory" ? "Collectory 참고 시세" : "KREAM 참고 시세";
-  const sourceActionLabel = result?.source === "Collectory" ? "Collectory 검색 열기" : "KREAM 검색 열기";
+  const sourceLabel =
+    result?.source === "CollectoryDB" ? "DB 저장 시세" : result?.source === "Collectory" ? "Collectory 참고 시세" : "KREAM 참고 시세";
+  const sourceActionLabel = result?.source === "KREAM" ? "KREAM 검색 열기" : "Collectory 검색 열기";
 
   return (
     <div className="stack">
