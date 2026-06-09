@@ -6,7 +6,7 @@ import { PricePanel } from "@/components/PricePanel";
 import { hasSearchableCardSignal, parseOcrText } from "@/lib/cardParsing";
 import type { ParsedCardInfo } from "@/lib/types";
 
-type ScanState = "idle" | "camera" | "ocr" | "needs-card" | "found" | "kream" | "done" | "error";
+type ScanState = "idle" | "camera" | "ocr" | "needs-card" | "found" | "searching" | "done" | "error";
 
 const STATUS: Record<ScanState, string> = {
   idle: "카메라를 준비하고 있습니다.",
@@ -14,7 +14,7 @@ const STATUS: Record<ScanState, string> = {
   ocr: "글자를 읽는 중...",
   "needs-card": "카드명과 번호가 보이게 맞춰주세요.",
   found: "카드 정보를 찾았습니다.",
-  kream: "KREAM 데이터를 가져오는 중...",
+  searching: "DB 저장 시세를 먼저 확인하는 중...",
   done: "시세 데이터를 표시합니다.",
   error: "카메라 또는 OCR을 사용할 수 없습니다.",
 };
@@ -128,7 +128,7 @@ export function ScanClient() {
     if (compact === lastTextRef.current && Date.now() - lastSearchAt.current < 8000) return;
     lastTextRef.current = compact;
     lastSearchAt.current = Date.now();
-    setState("kream");
+    setState("searching");
 
     const response = await fetch("/api/search", {
       method: "POST",
@@ -158,7 +158,7 @@ export function ScanClient() {
           {lastRawText && state !== "done" ? <details className="ocr-debug"><summary>읽은 글자</summary>{lastRawText}</details> : null}
         </div>
       </section>
-      <PricePanel data={data} loading={state === "kream"} />
+      <PricePanel data={data} loading={state === "searching"} />
     </div>
   );
 }

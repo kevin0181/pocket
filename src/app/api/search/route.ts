@@ -31,13 +31,6 @@ export async function POST(request: Request) {
   const uniqueQueries = Array.from(new Set(queries.filter(Boolean)));
   const collectoryQueries = Array.from(new Set([cardInfo.cardName, ...uniqueQueries].filter((query) => query.trim().length >= 2)));
 
-  for (const query of [...collectoryQueries, ...uniqueQueries]) {
-    const cached = getCachedResult(query);
-    if (cached && cached.listings.length > 0) {
-      return NextResponse.json({ cardInfo, queries: uniqueQueries, result: cached });
-    }
-  }
-
   const tried = [];
   for (const query of collectoryQueries) {
     const dbResult = await searchCollectoryDatabase(query, cardInfo);
@@ -46,6 +39,13 @@ export async function POST(request: Request) {
       if (dbResult.listings.length > 0) {
         return NextResponse.json({ cardInfo, queries: uniqueQueries, result: dbResult });
       }
+    }
+  }
+
+  for (const query of [...collectoryQueries, ...uniqueQueries]) {
+    const cached = getCachedResult(query);
+    if (cached && cached.listings.length > 0) {
+      return NextResponse.json({ cardInfo, queries: uniqueQueries, result: cached });
     }
   }
 

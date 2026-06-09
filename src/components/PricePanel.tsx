@@ -37,7 +37,7 @@ export function PricePanel({ data, loading }: { data?: SearchResponse | null; lo
 
       <section className="panel stack">
         <h2>{sourceLabel}</h2>
-        {loading ? <p className="subtle">시세 데이터를 가져오는 중...</p> : null}
+        {loading ? <p className="subtle">DB 저장 시세를 먼저 확인하는 중...</p> : null}
         {result?.stats ? (
           <div className="metric-grid">
             <Metric label="중앙값" value={formatWon(result.stats.median)} />
