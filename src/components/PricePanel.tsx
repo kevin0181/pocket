@@ -1,7 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatWon } from "@/lib/priceStats";
-import type { ParsedCardInfo, PriceResult } from "@/lib/types";
+import type { KreamListing, ParsedCardInfo, PriceResult } from "@/lib/types";
 
 type SearchResponse = {
   cardInfo: ParsedCardInfo;
@@ -12,13 +13,14 @@ type SearchResponse = {
 export function PricePanel({ data, loading }: { data?: SearchResponse | null; loading?: boolean }) {
   const cardInfo = data?.cardInfo;
   const result = data?.result;
+  const variantGroups = useMemo(() => groupListingsByVariant(result?.listings || []), [result?.listings]);
   const sourceLabel =
     result?.source === "CollectoryDB" ? "DB 저장 시세" : result?.source === "Collectory" ? "Collectory 참고 시세" : "KREAM 참고 시세";
   const sourceActionLabel = result?.source === "KREAM" ? "KREAM 검색 열기" : "Collectory 검색 열기";
 
   return (
     <div className="stack">
-      <section className="panel stack">
+      <section className="panel stack info-panel">
         <h2>인식된 카드 정보</h2>
         {cardInfo ? (
           <>
@@ -70,17 +72,34 @@ export function PricePanel({ data, loading }: { data?: SearchResponse | null; lo
       ) : null}
 
       {result?.listings.length ? (
-        <section className="panel stack">
-          <h3>검색된 참고 데이터</h3>
-          {result.listings.map((listing) => (
-            <a className="listing" href={listing.url || result.searchUrl} target="_blank" rel="noreferrer" key={`${listing.title}-${listing.price}`}>
-              {listing.imageUrl ? <img src={listing.imageUrl} alt="" /> : <span className="image-fallback" />}
-              <span>
-                <strong className="listing-title">{listing.title}</strong>
-                <span className="price">{formatWon(listing.price)}</span>
-              </span>
-            </a>
-          ))}
+        <section className="panel stack results-panel">
+          <div className="section-heading">
+            <h3>카드 종류 후보</h3>
+            <span className="subtle">{variantGroups.length}종 / {result.listings.length}개 데이터</span>
+          </div>
+          <div className="variant-grid">
+            {variantGroups.map((group) => (
+              <a className="variant-card" href={group.url || result.searchUrl} target="_blank" rel="noreferrer" key={group.key}>
+                {group.imageUrl ? <img className="variant-image" src={group.imageUrl} alt="" /> : <span className="variant-image image-fallback" />}
+                <span className="variant-body">
+                  <span className="variant-title">{group.name}</span>
+                  <span className="variant-meta">
+                    {group.number ? <Badge>{group.number}</Badge> : null}
+                    {group.rarity ? <Badge>{group.rarity}</Badge> : null}
+                    {group.setName ? <Badge>{group.setName}</Badge> : null}
+                  </span>
+                  <span className="variant-price-row">
+                    <strong>{formatWon(group.medianPrice || group.lowestPrice || group.highestPrice)}</strong>
+                    {group.count > 1 ? <small>{group.count}개 가격</small> : null}
+                  </span>
+                  <span className="price-range">
+                    <span>최저 {formatWon(group.lowestPrice)}</span>
+                    <span>최고 {formatWon(group.highestPrice)}</span>
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
         </section>
       ) : null}
     </div>
@@ -103,4 +122,78 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function Badge({ children }: { children: string }) {
+  return <span className="badge">{children}</span>;
+}
+
+type VariantGroup = {
+  key: string;
+  name: string;
+  number?: string;
+  rarity?: string;
+  setName?: string;
+  imageUrl?: string;
+  url?: string;
+  count: number;
+  lowestPrice: number | null;
+  medianPrice: number | null;
+  highestPrice: number | null;
+};
+
+function groupListingsByVariant(listings: KreamListing[]): VariantGroup[] {
+  const groups = new Map<string, KreamListing[]>();
+
+  for (const listing of listings) {
+    const parsed = parseListingTitle(listing.title);
+    const key = [parsed.name, parsed.number, parsed.rarity, parsed.setName].filter(Boolean).join("|") || listing.title;
+    groups.set(key, [...(groups.get(key) || []), listing]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, groupListings]) => {
+      const parsed = parseListingTitle(groupListings[0].title);
+      const prices = groupListings
+        .map((listing) => listing.price)
+        .filter((price): price is number => typeof price === "number" && Number.isFinite(price) && price > 0)
+        .sort((a, b) => a - b);
+      const middle = Math.floor(prices.length / 2);
+      const medianPrice = prices.length ? (prices.length % 2 === 0 ? Math.round((prices[middle - 1] + prices[middle]) / 2) : prices[middle]) : null;
+
+      return {
+        key,
+        ...parsed,
+        imageUrl: groupListings.find((listing) => listing.imageUrl)?.imageUrl,
+        url: groupListings.find((listing) => listing.url)?.url,
+        count: prices.length || groupListings.length,
+        lowestPrice: prices[0] || null,
+        medianPrice,
+        highestPrice: prices[prices.length - 1] || null,
+      };
+    })
+    .sort((a, b) => {
+      const priceA = a.medianPrice || a.lowestPrice || 0;
+      const priceB = b.medianPrice || b.lowestPrice || 0;
+      return priceB - priceA;
+    });
+}
+
+function parseListingTitle(title: string) {
+  const setMatch = title.match(/\(([^)]+)\)\s*$/);
+  const withoutSet = title.replace(/\s*\([^)]+\)\s*$/, "").trim();
+  const number = withoutSet.match(/\b\d{1,3}\s*\/\s*\d{1,3}(?:[-A-Z]*)?\b/i)?.[0]?.replace(/\s/g, "");
+  const rarity = withoutSet.match(/\b(SAR|RRR|SR|AR|UR|RR|CHR|CSR|HR|SSR|S|R|U|C|N)\b/i)?.[1]?.toUpperCase();
+  const name = withoutSet
+    .replace(/\b\d{1,3}\s*\/\s*\d{1,3}(?:[-A-Z]*)?\b/gi, "")
+    .replace(/\b(SAR|RRR|SR|AR|UR|RR|CHR|CSR|HR|SSR|S|R|U|C|N)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    name: name || title,
+    number,
+    rarity,
+    setName: setMatch?.[1],
+  };
 }

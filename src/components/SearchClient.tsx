@@ -21,7 +21,7 @@ type KreamImportPayload = {
 };
 
 export function SearchClient() {
-  const [query, setQuery] = useState("리자몽 ex 134/108 SAR 한글판");
+  const [query, setQuery] = useState("피카츄 ex 234/193 SAR 한글판");
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -86,7 +86,7 @@ export function SearchClient() {
     <div className="scan-layout">
       <section className="panel stack">
         <h1>직접 검색</h1>
-        <p className="subtle">OCR이 틀렸을 때 카드명, 번호, 레어도를 직접 넣어 KREAM 참고 시세를 확인합니다.</p>
+        <p className="subtle">카드명, 번호, 레어도를 입력하면 DB에 저장된 한글판 시세를 먼저 확인합니다.</p>
         <form className="search-form" onSubmit={submit}>
           <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="검색어" />
           <button className="button primary" disabled={loading}>

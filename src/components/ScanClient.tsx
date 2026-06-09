@@ -1,6 +1,6 @@
 "use client";
 
-import { createWorker, type Worker } from "tesseract.js";
+import { createWorker, PSM, type Worker } from "tesseract.js";
 import { useEffect, useRef, useState } from "react";
 import { PricePanel } from "@/components/PricePanel";
 import { hasSearchableCardSignal, parseOcrText } from "@/lib/cardParsing";
@@ -32,6 +32,7 @@ export function ScanClient() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
+  const [lastRawText, setLastRawText] = useState("");
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -50,6 +51,10 @@ export function ScanClient() {
         setState("camera");
 
         workerRef.current = await createWorker("kor+eng");
+        await workerRef.current.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+          preserve_interword_spaces: "1",
+        });
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "초기화 실패");
         setState("error");
@@ -89,13 +94,19 @@ export function ScanClient() {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       const crop = getGuideCrop(video, guideRef.current);
-      canvas.width = crop.width;
-      canvas.height = Math.round(crop.height * 0.46);
-      ctx.filter = "contrast(1.24) saturate(0.9) grayscale(0.15)";
-      drawOcrBands(ctx, video, crop);
+      const scale = getOcrScale(crop.width);
+      const target = {
+        width: Math.round(crop.width * scale),
+        height: Math.round(crop.height * 0.52 * scale),
+      };
+      canvas.width = target.width;
+      canvas.height = target.height;
+      drawOcrBands(ctx, video, crop, scale);
+      enhanceOcrCanvas(ctx, canvas.width, canvas.height);
 
       const result = await worker.recognize(canvas);
       const text = result.data.text.trim();
+      setLastRawText(text);
       const cardInfo = parseOcrText(text);
       if (!isUsefulCardInfo(cardInfo)) {
         setState("needs-card");
@@ -136,9 +147,15 @@ export function ScanClient() {
         <video ref={videoRef} playsInline muted />
         <canvas ref={canvasRef} hidden />
         <div ref={guideRef} className="guide" aria-hidden="true" />
+        <div className="scan-controls">
+          <button className="button primary" type="button" onClick={() => void captureAndRead()} disabled={!cameraReady || busyRef.current}>
+            촬영
+          </button>
+        </div>
         <div className="status-pill">
           <strong>{STATUS[state]}</strong>
           {error ? <div className="subtle">{error}</div> : null}
+          {lastRawText && state !== "done" ? <details className="ocr-debug"><summary>읽은 글자</summary>{lastRawText}</details> : null}
         </div>
       </section>
       <PricePanel data={data} loading={state === "kream"} />
@@ -186,20 +203,52 @@ function drawOcrBands(
   ctx: CanvasRenderingContext2D,
   video: HTMLVideoElement,
   crop: { x: number; y: number; width: number; height: number },
+  scale = 1,
 ) {
-  const topHeight = Math.round(crop.height * 0.24);
-  const bottomHeight = Math.round(crop.height * 0.22);
+  const topHeight = Math.round(crop.height * 0.28);
+  const bottomHeight = Math.round(crop.height * 0.24);
   const bottomY = crop.y + crop.height - bottomHeight;
 
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, crop.width, topHeight + bottomHeight);
-  ctx.drawImage(video, crop.x, crop.y, crop.width, topHeight, 0, 0, crop.width, topHeight);
-  ctx.drawImage(video, crop.x, bottomY, crop.width, bottomHeight, 0, topHeight, crop.width, bottomHeight);
+  ctx.fillRect(0, 0, Math.round(crop.width * scale), Math.round((topHeight + bottomHeight) * scale));
+  ctx.drawImage(video, crop.x, crop.y, crop.width, topHeight, 0, 0, Math.round(crop.width * scale), Math.round(topHeight * scale));
+  ctx.drawImage(
+    video,
+    crop.x,
+    bottomY,
+    crop.width,
+    bottomHeight,
+    0,
+    Math.round(topHeight * scale),
+    Math.round(crop.width * scale),
+    Math.round(bottomHeight * scale),
+  );
 }
 
 function isUsefulCardInfo(info: ParsedCardInfo) {
   if (info.rawText.length < 8) return false;
   return hasSearchableCardSignal(info);
+}
+
+function getOcrScale(width: number) {
+  if (width < 800) return 2.2;
+  if (width < 1200) return 1.7;
+  return 1.3;
+}
+
+function enhanceOcrCanvas(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const image = ctx.getImageData(0, 0, width, height);
+  const data = image.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const boosted = Math.max(0, Math.min(255, (gray - 118) * 1.9 + 128));
+    data[i] = boosted;
+    data[i + 1] = boosted;
+    data[i + 2] = boosted;
+  }
+
+  ctx.putImageData(image, 0, 0);
 }
 
 function clamp(value: number, min: number, max: number) {
